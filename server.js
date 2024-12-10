@@ -19,7 +19,7 @@ const ORIGINAL_COOKIES_PATH = path.join(__dirname, 'cookies.txt');
 
 // Inicializar Express
 const app = express();
-const port = 81;
+const port = process.env.PORT || 3000;
 
 // Función para manejar errores de spawn y limpiar archivos temporales
 const handleSpawnError = (processName, err, tempDir, reject) => {
