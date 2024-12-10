@@ -13,13 +13,20 @@ import Tiktok from "@tobyg74/tiktok-api-dl";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Ruta al archivo de cookies
+const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+
 // Inicializar Express
 const app = express();
 const port = 81;
 
 // Función para manejar errores de spawn
-const handleSpawnError = (processName, err) => {
+const handleSpawnError = (processName, err, tempCookiesPath) => {
   console.error(`Error al iniciar el proceso ${processName}:`, err.message);
+  // Eliminar el archivo temporal de cookies si existe
+  if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
+    fs.unlinkSync(tempCookiesPath);
+  }
   process.exit(1); // Salir del script con error
 };
 
@@ -39,6 +46,15 @@ async function downloadMedia(url, type, requestId) {
 
     const outputFilePath = path.join(tempDir, `${requestId}_media.${type === 'audio' ? 'mp3' : 'mp4'}`);
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36';
+
+    // Crear una copia temporal del archivo de cookies
+    const tempCookiesPath = path.join(tempDir, `cookies_${requestId}.txt`);
+    try {
+      fs.copyFileSync(COOKIES_PATH, tempCookiesPath);
+    } catch (err) {
+      console.error('Error al copiar el archivo de cookies:', err);
+      return reject(err);
+    }
 
     // Iniciar el proceso de ffmpeg sin la barra de progreso
     const ffmpeg = spawn('ffmpeg', [
@@ -61,7 +77,7 @@ async function downloadMedia(url, type, requestId) {
 
     // Manejar errores de ffmpeg
     ffmpeg.on('error', (err) => {
-      handleSpawnError('ffmpeg', err);
+      handleSpawnError('ffmpeg', err, tempCookiesPath);
     });
 
     // Manejar el cierre de ffmpeg
@@ -69,6 +85,11 @@ async function downloadMedia(url, type, requestId) {
       if (code === 0) {
         // Leer el archivo de salida y resolver la promesa
         fs.readFile(outputFilePath, (err, data) => {
+          // Eliminar el archivo temporal de cookies
+          if (fs.existsSync(tempCookiesPath)) {
+            fs.unlinkSync(tempCookiesPath);
+          }
+
           if (err) {
             console.error('Error leyendo el archivo descargado:', err);
             return reject(err);
@@ -82,18 +103,22 @@ async function downloadMedia(url, type, requestId) {
         });
       } else {
         console.error(`ffmpeg salió con el código ${code}`);
+        // Eliminar el archivo temporal de cookies
+        if (fs.existsSync(tempCookiesPath)) {
+          fs.unlinkSync(tempCookiesPath);
+        }
         reject(new Error(`ffmpeg exited with code ${code}`));
       }
     });
 
-    // Descarga audio con yt-dlp
-    const audio = spawn('yt-dlp', ['-f', 'bestaudio', '-o', '-', url], {
+    // Descarga audio con yt-dlp usando el archivo de cookies temporal
+    const audio = spawn('yt-dlp', ['-f', 'bestaudio', '--cookies', tempCookiesPath, '-o', '-', url], {
       stdio: ['ignore', 'pipe', 'inherit'],
       env: { ...process.env, 'YTDLP_USE_UNPAID_API': 'true' }, // Opcional: Añadir variables de entorno si es necesario
     });
 
     audio.on('error', (err) => {
-      handleSpawnError('yt-dlp (audio)', err);
+      handleSpawnError('yt-dlp (audio)', err, tempCookiesPath);
     });
 
     audio.stdout.pipe(ffmpeg.stdio[3]);
@@ -105,14 +130,14 @@ async function downloadMedia(url, type, requestId) {
       }
     });
 
-    // Descarga video con yt-dlp
-    const video = spawn('yt-dlp', ['-f', 'bestvideo', '-o', '-', url], {
+    // Descarga video con yt-dlp usando el archivo de cookies temporal
+    const video = spawn('yt-dlp', ['-f', 'bestvideo', '--cookies', tempCookiesPath, '-o', '-', url], {
       stdio: ['ignore', 'pipe', 'inherit'],
       env: { ...process.env, 'YTDLP_USE_UNPAID_API': 'true' }, // Opcional: Añadir variables de entorno si es necesario
     });
 
     video.on('error', (err) => {
-      handleSpawnError('yt-dlp (video)', err);
+      handleSpawnError('yt-dlp (video)', err, tempCookiesPath);
     });
 
     video.stdout.pipe(ffmpeg.stdio[4]);
