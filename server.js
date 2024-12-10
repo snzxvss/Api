@@ -8,24 +8,25 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import Tiktok from "@tobyg74/tiktok-api-dl";
+import os from 'os';
 
 // Definir __dirname manualmente
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Ruta al archivo de cookies
-const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+// Ruta al archivo de cookies original
+const ORIGINAL_COOKIES_PATH = path.join(__dirname, 'cookies.txt');
 
 // Inicializar Express
 const app = express();
 const port = 81;
 
-// Función para manejar errores de spawn
-const handleSpawnError = (processName, err, tempCookiesPath) => {
+// Función para manejar errores de spawn y limpiar archivos temporales
+const handleSpawnError = (processName, err, tempDir) => {
   console.error(`Error al iniciar el proceso ${processName}:`, err.message);
-  // Eliminar el archivo temporal de cookies si existe
-  if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
-    fs.unlinkSync(tempCookiesPath);
+  // Eliminar el directorio temporal si existe
+  if (tempDir && fs.existsSync(tempDir)) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
   process.exit(1); // Salir del script con error
 };
@@ -39,22 +40,23 @@ const handleSpawnError = (processName, err, tempCookiesPath) => {
  */
 async function downloadMedia(url, type, requestId) {
   return new Promise((resolve, reject) => {
-    const tempDir = path.join(__dirname, 'temp');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir);
+    // Crear un directorio temporal único
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `download_${requestId}_`));
+
+    // Ruta al archivo de cookies temporal
+    const tempCookiesPath = path.join(tempDir, `cookies_${requestId}.txt`);
+
+    try {
+      // Copiar el archivo de cookies original al temporal
+      fs.copyFileSync(ORIGINAL_COOKIES_PATH, tempCookiesPath);
+    } catch (err) {
+      console.error('Error al copiar el archivo de cookies:', err);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      return reject(err);
     }
 
     const outputFilePath = path.join(tempDir, `${requestId}_media.${type === 'audio' ? 'mp3' : 'mp4'}`);
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36';
-
-    // Crear una copia temporal del archivo de cookies
-    const tempCookiesPath = path.join(tempDir, `cookies_${requestId}.txt`);
-    try {
-      fs.copyFileSync(COOKIES_PATH, tempCookiesPath);
-    } catch (err) {
-      console.error('Error al copiar el archivo de cookies:', err);
-      return reject(err);
-    }
 
     // Iniciar el proceso de ffmpeg sin la barra de progreso
     const ffmpeg = spawn('ffmpeg', [
@@ -77,7 +79,7 @@ async function downloadMedia(url, type, requestId) {
 
     // Manejar errores de ffmpeg
     ffmpeg.on('error', (err) => {
-      handleSpawnError('ffmpeg', err, tempCookiesPath);
+      handleSpawnError('ffmpeg', err, tempDir);
     });
 
     // Manejar el cierre de ffmpeg
@@ -85,10 +87,8 @@ async function downloadMedia(url, type, requestId) {
       if (code === 0) {
         // Leer el archivo de salida y resolver la promesa
         fs.readFile(outputFilePath, (err, data) => {
-          // Eliminar el archivo temporal de cookies
-          if (fs.existsSync(tempCookiesPath)) {
-            fs.unlinkSync(tempCookiesPath);
-          }
+          // Eliminar el directorio temporal
+          fs.rmSync(tempDir, { recursive: true, force: true });
 
           if (err) {
             console.error('Error leyendo el archivo descargado:', err);
@@ -96,17 +96,11 @@ async function downloadMedia(url, type, requestId) {
           }
           // Resolver con los datos del archivo
           resolve(data);
-          // Eliminar el archivo temporal
-          fs.unlink(outputFilePath, (unlinkErr) => {
-            if (unlinkErr) console.error('Error eliminando el archivo temporal:', unlinkErr);
-          });
         });
       } else {
         console.error(`ffmpeg salió con el código ${code}`);
-        // Eliminar el archivo temporal de cookies
-        if (fs.existsSync(tempCookiesPath)) {
-          fs.unlinkSync(tempCookiesPath);
-        }
+        // Eliminar el directorio temporal
+        fs.rmSync(tempDir, { recursive: true, force: true });
         reject(new Error(`ffmpeg exited with code ${code}`));
       }
     });
@@ -118,7 +112,7 @@ async function downloadMedia(url, type, requestId) {
     });
 
     audio.on('error', (err) => {
-      handleSpawnError('yt-dlp (audio)', err, tempCookiesPath);
+      handleSpawnError('yt-dlp (audio)', err, tempDir);
     });
 
     audio.stdout.pipe(ffmpeg.stdio[3]);
@@ -137,7 +131,7 @@ async function downloadMedia(url, type, requestId) {
     });
 
     video.on('error', (err) => {
-      handleSpawnError('yt-dlp (video)', err, tempCookiesPath);
+      handleSpawnError('yt-dlp (video)', err, tempDir);
     });
 
     video.stdout.pipe(ffmpeg.stdio[4]);
