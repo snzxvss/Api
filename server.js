@@ -24,7 +24,7 @@ const ORIGINAL_COOKIES_PATH = path.join(__dirname, 'cookies.txt');
 
 // Inicializar Express
 const app = express();
-const port = 81;
+const port = process.env.PORT || 3000;
 
 // Función para manejar errores y limpiar archivos temporales
 const handleError = (error, tempDir, reject) => {
