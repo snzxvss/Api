@@ -155,3 +155,8 @@ async function downloadMedia(url, type, requestId) {
     }
   });
 }
+
+// Iniciar el servidor en el puerto 81
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
