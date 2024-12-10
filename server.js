@@ -47,8 +47,14 @@ async function downloadMedia(url, type, requestId) {
     const tempCookiesPath = path.join(tempDir, `cookies_${requestId}.txt`);
 
     try {
+      // Verificar si el archivo de cookies original existe
+      if (!fs.existsSync(ORIGINAL_COOKIES_PATH)) {
+        throw new Error(`El archivo de cookies original no existe: ${ORIGINAL_COOKIES_PATH}`);
+      }
+    
       // Copiar el archivo de cookies original al temporal
       fs.copyFileSync(ORIGINAL_COOKIES_PATH, tempCookiesPath);
+      console.log(`cookies.txt copiado exitosamente a ${tempCookiesPath}`);
     } catch (err) {
       console.error('Error al copiar el archivo de cookies:', err);
       fs.rmSync(tempDir, { recursive: true, force: true });
