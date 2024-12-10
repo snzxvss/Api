@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import Tiktok from "@tobyg74/tiktok-api-dl";
+import ytdlp from 'yt-dlp-exec';
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -18,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const port = 80;
+const port = 81;
 
 app.get('/download', async (req, res) => {
   const { url, type } = req.query;
@@ -111,18 +112,20 @@ async function downloadMedia(url, type, cookiesPath, requestId) {
     }
 
     const outputFilePath = path.join(tempDir, `${requestId}_media.${type === 'audio' ? 'webm' : 'mp4'}`);
-    const ytDlpPath = path.join(__dirname, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp.exe');
     const format = type === 'audio' ? 'bestaudio' : 'bestvideo[height<=480]+bestaudio';
     const mergeOutputFormat = type === 'audio' ? '' : '--merge-output-format mp4';
-    const command = `"${ytDlpPath}" ${url} --no-playlist --output "${outputFilePath}" --format "${format}" ${mergeOutputFormat} --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" --add-header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" --add-header "Accept-Language: en-US,en;q=0.9" --add-header "Referer: https://www.youtube.com/" --cookies "${cookiesPath}" --ignore-errors --no-simulate --verbose`;
 
-    exec(command, (error, stdout, stderr) => {
+    // Ruta completa al ejecutable yt-dlp
+    const ytdlpPath = path.join(__dirname, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp');
+
+    const command = `"${ytdlpPath}" "${url}" --no-playlist --output "${outputFilePath}" --format "${format}" ${mergeOutputFormat} --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" --add-header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" --add-header "Accept-Language: en-US,en;q=0.9" --add-header "Referer: https://www.youtube.com/" --cookies "${cookiesPath}" --ignore-errors --no-simulate --verbose`;
+
+    exec(command, { shell: true }, (error, stdout, stderr) => {
       if (error) {
         console.error(`yt-dlp Error: ${stderr}`);
         resolve(Buffer.from('')); // Return an empty buffer on error
         return;
       }
-
       console.log(`yt-dlp Output: ${stdout}`);
 
       if (type === 'video') {
