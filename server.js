@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Ruta al archivo de cookies original
-const ORIGINAL_COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+const ORIGINAL_COOKIES_PATH = path.join(__dirname, 'cookies.txt'); // Ruta correcta al cookies.txt
 
 // Inicializar Express
 const app = express();
