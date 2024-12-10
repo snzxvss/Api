@@ -22,13 +22,13 @@ const app = express();
 const port = 81;
 
 // Función para manejar errores de spawn y limpiar archivos temporales
-const handleSpawnError = (processName, err, tempDir) => {
+const handleSpawnError = (processName, err, tempDir, reject) => {
   console.error(`Error al iniciar el proceso ${processName}:`, err.message);
   // Eliminar el directorio temporal si existe
   if (tempDir && fs.existsSync(tempDir)) {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
-  process.exit(1); // Salir del script con error
+  reject(err); // Rechazar la promesa en lugar de salir del proceso
 };
 
 /**
@@ -79,7 +79,7 @@ async function downloadMedia(url, type, requestId) {
 
     // Manejar errores de ffmpeg
     ffmpeg.on('error', (err) => {
-      handleSpawnError('ffmpeg', err, tempDir);
+      handleSpawnError('ffmpeg', err, tempDir, reject);
     });
 
     // Manejar el cierre de ffmpeg
@@ -117,7 +117,7 @@ async function downloadMedia(url, type, requestId) {
     });
 
     audio.on('error', (err) => {
-      handleSpawnError('yt-dlp (audio)', err, tempDir);
+      handleSpawnError('yt-dlp (audio)', err, tempDir, reject);
     });
 
     audio.stdout.pipe(ffmpeg.stdio[3]);
@@ -141,7 +141,7 @@ async function downloadMedia(url, type, requestId) {
     });
 
     video.on('error', (err) => {
-      handleSpawnError('yt-dlp (video)', err, tempDir);
+      handleSpawnError('yt-dlp (video)', err, tempDir, reject);
     });
 
     video.stdout.pipe(ffmpeg.stdio[4]);
