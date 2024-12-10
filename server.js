@@ -100,10 +100,33 @@ async function downloadMedia(url, type, requestId) {
     }
 
     const outputFilePath = path.join(tempDir, `${requestId}_media.${type === 'audio' ? 'mp3' : 'mp4'}`);
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
+    let streamOptions = {
+      quality: type === 'audio' ? 'highestaudio' : 'highestvideo',
+      requestOptions: {
+        headers: {
+          'User-Agent': userAgent
+        }
+      }
+    };
 
     if (type === 'video') {
-      const stream = ytdl(url, { quality: 'highestvideo' });
+      streamOptions = {
+        ...streamOptions,
+        format: 'mp4' // Ensure the format is mp4
+      };
+    }
 
+    const stream = ytdl(url, streamOptions);
+
+    // Listen for errors from ytdl-core
+    stream.on('error', (err) => {
+      console.error('ytdl Error:', err.message);
+      reject(err);
+    });
+
+    if (type === 'video') {
       ffmpeg(stream)
         .videoCodec('libx264')
         .audioCodec('aac')
@@ -127,8 +150,6 @@ async function downloadMedia(url, type, requestId) {
           reject(err);
         });
     } else if (type === 'audio') {
-      const stream = ytdl(url, { quality: 'highestaudio' });
-
       ffmpeg(stream)
         .audioCodec('libmp3lame')
         .format('mp3')
