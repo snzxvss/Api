@@ -105,8 +105,13 @@ async function downloadMedia(url, type, requestId) {
       }
     });
 
-    // Descarga audio con yt-dlp usando el archivo de cookies temporal
-    const audio = spawn('yt-dlp', ['-f', 'bestaudio', '--cookies', tempCookiesPath, '-o', '-', url], {
+    // Descarga audio con yt-dlp usando el archivo de cookies temporal y el user-agent
+    const audio = spawn('yt-dlp', [
+      '-f', 'bestaudio',
+      '--cookies', tempCookiesPath,
+      '--user-agent', userAgent,
+      '-o', '-', url
+    ], {
       stdio: ['ignore', 'pipe', 'inherit'],
       env: { ...process.env, 'YTDLP_USE_UNPAID_API': 'true' }, // Opcional: Añadir variables de entorno si es necesario
     });
@@ -124,8 +129,13 @@ async function downloadMedia(url, type, requestId) {
       }
     });
 
-    // Descarga video con yt-dlp usando el archivo de cookies temporal
-    const video = spawn('yt-dlp', ['-f', 'bestvideo', '--cookies', tempCookiesPath, '-o', '-', url], {
+    // Descarga video con yt-dlp usando el archivo de cookies temporal y el user-agent
+    const video = spawn('yt-dlp', [
+      '-f', 'bestvideo',
+      '--cookies', tempCookiesPath,
+      '--user-agent', userAgent,
+      '-o', '-', url
+    ], {
       stdio: ['ignore', 'pipe', 'inherit'],
       env: { ...process.env, 'YTDLP_USE_UNPAID_API': 'true' }, // Opcional: Añadir variables de entorno si es necesario
     });
