@@ -17,5 +17,9 @@
   "scripts": {
     "start": "node yt.cjs",
     "dev": "nodemon yt.cjs"
-  }
+  },
+  "engines": {
+  "node": "20.x",
+  "npm": "9.x"
+ }
 }
