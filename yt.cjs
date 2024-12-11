@@ -3,7 +3,7 @@ const axios = require('axios');
 const { ytsearch, ytmp3, ytmp4 } = require('@dark-yasiya/yt-dl.js');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Middleware para parsear JSON (opcional, si planeas manejar JSON en solicitudes)
 app.use(express.json());
