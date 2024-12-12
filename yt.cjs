@@ -43,6 +43,28 @@ async function fetchWithRetry(url, options, retries = 3, delay = 1000) {
   throw new Error('Max retries reached');
 }
 
+// Función para realizar ytmp4 con reintentos
+async function ytmp4WithRetry(videoUrl, quality, retries = 3, delay = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await ytmp4(videoUrl, quality);
+      if (result && result.download && result.download.url) {
+        return result;
+      } else {
+        console.error(`Intento ${attempt}: La respuesta de ytmp4 no contiene la URL de descarga.`);
+        throw new Error('La respuesta de ytmp4 no contiene la URL de descarga.');
+      }
+    } catch (error) {
+      if (attempt < retries) {
+        console.error(`Intento ${attempt} fallido: ${error.message}. Reintentando en ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw new Error(`Error tras ${retries} intentos: ${error.message}`);
+      }
+    }
+  }
+}
+
 // Ruta para buscar videos en YouTube
 app.get('/search', async (req, res) => {
   const query = req.query.query;
@@ -116,7 +138,7 @@ app.get('/download/video', async (req, res) => {
   }
 
   try {
-    const result = await ytmp4(videoUrl, quality);
+    const result = await ytmp4WithRetry(videoUrl, quality);
     res.locals.responseBody = result;
 
     const downloadUrl = result.download.url;
