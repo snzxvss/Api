@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 const { ytsearch, ytmp3, ytmp4 } = require('@dark-yasiya/yt-dl.js');
+const unzipper = require('unzipper');
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -26,10 +28,26 @@ app.use((req, res, next) => {
 });
 
 // Función para realizar solicitudes con reintentos
-async function fetchWithRetry(url, options, retries = 3, delay = 1000) {
+async function fetchWithRetry(url, options, retries = 10, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await axios.get(url, options);
+      const response = await axios.get(url, { ...options, responseType: 'arraybuffer' });
+      console.log('response: ', response);
+      console.log(`Intento ${i + 1}:`, response.status, response.statusText);
+      
+      if (response.headers['content-type'] === 'application/zip' || response.headers['content-disposition']?.includes('.zip')) {
+        const buffer = Buffer.from(response.data);
+        const directory = await unzipper.Open.buffer(buffer);
+        const mp4File = directory.files.find(file => file.path.endsWith('.mp4'));
+        
+        if (mp4File) {
+          const mp4Buffer = await mp4File.buffer();
+          return { data: mp4Buffer };
+        } else {
+          throw new Error('No se encontró un archivo .mp4 en el .zip.');
+        }
+      }
+      
       return response;
     } catch (error) {
       if (error.response && (error.response.status === 503 || error.response.status === 500)) {
@@ -44,10 +62,11 @@ async function fetchWithRetry(url, options, retries = 3, delay = 1000) {
 }
 
 // Función para realizar ytmp4 con reintentos
-async function ytmp4WithRetry(videoUrl, quality, retries = 3, delay = 1000) {
+async function ytmp4WithRetry(videoUrl, quality, retries = 10, delay = 1000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const result = await ytmp4(videoUrl, quality);
+      console.log(`Intento ${attempt}:`, result);
       if (result && result.download && result.download.url) {
         return result;
       } else {
@@ -144,21 +163,27 @@ app.get('/download/video', async (req, res) => {
     const downloadUrl = result.download.url;
     const filename = result.download.filename || 'video.mp4';
 
-    // Realizar la solicitud de descarga utilizando axios con respuesta en streaming
-    const response = await fetchWithRetry(downloadUrl, { responseType: 'stream' });
+    // Realizar la solicitud de descarga utilizando fetchWithRetry
+    const response = await fetchWithRetry(downloadUrl, { responseType: 'arraybuffer' });
 
-    // Establecer las cabeceras para la descarga
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'video/mp4');
+    // Verificar si la respuesta es un Buffer (archivo .mp4 descomprimido)
+    if (Buffer.isBuffer(response.data)) {
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'video/mp4');
+      res.send(response.data);
+    } else {
+      // Manejo habitual del stream
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'video/mp4');
 
-    // Transmitir el contenido al cliente
-    response.data.pipe(res);
+      response.data.pipe(res);
 
-    // Manejar errores en la transmisión
-    response.data.on('error', (err) => {
-      console.error('Error durante la transmisión del video:', err);
-      res.status(500).send('Error durante la transmisión del video.');
-    });
+      // Manejar errores en la transmisión
+      response.data.on('error', (err) => {
+        console.error('Error durante la transmisión del video:', err);
+        res.status(500).send('Error durante la transmisión del video.');
+      });
+    }
 
   } catch (error) {
     console.error('Error descargando video:', error);
