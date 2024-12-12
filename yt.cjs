@@ -28,14 +28,21 @@ app.use((req, res, next) => {
 });
 
 // Función para realizar solicitudes con reintentos
+// Ajuste en la función fetchWithRetry para respetar el responseType pasado en options
 async function fetchWithRetry(url, options, retries = 10, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await axios.get(url, { ...options, responseType: 'arraybuffer' });
+      // Remover la sobrescritura de responseType y utilizar el proporcionado en options
+      const response = await axios.get(url, options);
       console.log('response: ', response);
       console.log(`Intento ${i + 1}:`, response.status, response.statusText);
       
-      if (response.headers['content-type'] === 'application/zip' || response.headers['content-disposition']?.includes('.zip')) {
+      // Solo procesar como zip si el responseType es 'arraybuffer'
+      if (
+        options.responseType === 'arraybuffer' &&
+        (response.headers['content-type'] === 'application/zip' ||
+          response.headers['content-disposition']?.includes('.zip'))
+      ) {
         const buffer = Buffer.from(response.data);
         const directory = await unzipper.Open.buffer(buffer);
         const mp4File = directory.files.find(file => file.path.endsWith('.mp4'));
@@ -105,7 +112,7 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// Ruta para descargar audio (MP3)
+// Ruta para descargar audio (MP3) con manejo de Buffer y Stream
 app.get('/download/audio', async (req, res) => {
   const videoUrl = req.query.url;
   if (!videoUrl) {
@@ -121,21 +128,29 @@ app.get('/download/audio', async (req, res) => {
     const downloadUrl = result.download.url;
     const filename = result.download.filename || 'audio.mp3';
 
-    // Realizar la solicitud de descarga utilizando axios con respuesta en streaming
+    // Realizar la solicitud de descarga utilizando fetchWithRetry con responseType 'stream'
     const response = await fetchWithRetry(downloadUrl, { responseType: 'stream' });
 
-    // Establecer las cabeceras para la descarga
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'audio/mpeg');
+    // Verificar si response.data es un Buffer o un Stream
+    if (Buffer.isBuffer(response.data)) {
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.send(response.data);
+    } else if (response.data && typeof response.data.pipe === 'function') {
+      // Manejo habitual del stream
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'audio/mpeg');
 
-    // Transmitir el contenido al cliente
-    response.data.pipe(res);
+      response.data.pipe(res);
 
-    // Manejar errores en la transmisión
-    response.data.on('error', (err) => {
-      console.error('Error durante la transmisión del audio:', err);
-      res.status(500).send('Error durante la transmisión del audio.');
-    });
+      // Manejar errores en la transmisión
+      response.data.on('error', (err) => {
+        console.error('Error durante la transmisión del audio:', err);
+        res.status(500).send('Error durante la transmisión del audio.');
+      });
+    } else {
+      throw new Error('Respuesta desconocida del servidor de descarga.');
+    }
 
   } catch (error) {
     console.error('Error descargando audio:', error);
