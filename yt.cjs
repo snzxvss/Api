@@ -25,6 +25,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Función para realizar solicitudes con reintentos
+async function fetchWithRetry(url, options, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await axios.get(url, options);
+      return response;
+    } catch (error) {
+      if (error.response && (error.response.status === 503 || error.response.status === 500)) {
+        console.error(`Error ${error.response.status}. Reintentando en ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw new Error('Max retries reached');
+}
+
 // Ruta para buscar videos en YouTube
 app.get('/search', async (req, res) => {
   const query = req.query.query;
@@ -63,9 +81,7 @@ app.get('/download/audio', async (req, res) => {
     const filename = result.download.filename || 'audio.mp3';
 
     // Realizar la solicitud de descarga utilizando axios con respuesta en streaming
-    const response = await axios.get(downloadUrl, {
-      responseType: 'stream',
-    });
+    const response = await fetchWithRetry(downloadUrl, { responseType: 'stream' });
 
     // Establecer las cabeceras para la descarga
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -107,9 +123,7 @@ app.get('/download/video', async (req, res) => {
     const filename = result.download.filename || 'video.mp4';
 
     // Realizar la solicitud de descarga utilizando axios con respuesta en streaming
-    const response = await axios.get(downloadUrl, {
-      responseType: 'stream',
-    });
+    const response = await fetchWithRetry(downloadUrl, { responseType: 'stream' });
 
     // Establecer las cabeceras para la descarga
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
